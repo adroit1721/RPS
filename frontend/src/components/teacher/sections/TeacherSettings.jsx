@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import { updateUser } from '../../../store/slices/authSlice';
 
 const TeacherSettings = () => {
   const { user } = useSelector(state => state.auth);
-  const dispatch = useDispatch();
 
   const [form, setForm] = useState({
     oldPassword: '',

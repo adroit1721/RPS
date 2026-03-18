@@ -5,10 +5,7 @@ import html2canvas from 'html2canvas';
 import { 
   GraduationCap, 
   ShieldCheck, 
-  Search, 
-  Printer, 
-  UserCircle,
-  ExternalLink 
+  UserCircle
 } from 'lucide-react';
 
 // Helper function to calculate Grade from Total Marks

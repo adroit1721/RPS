@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 
@@ -12,7 +12,7 @@ const ResultOverview = () => {
 
   // We should actually fetch students for the class and their corresponding results
   // For the UI demonstration, let's fetch an overview
-  const fetchClassResults = async (classId) => {
+  const fetchClassResults = useCallback(async (classId) => {
     if(!classId) return;
     setLoading(true);
     try {
@@ -27,11 +27,11 @@ const ResultOverview = () => {
       toast.error('Failed to load results overview');
     }
     setLoading(false);
-  };
+  }, [user.token]);
 
   useEffect(() => {
     if(selectedClass) fetchClassResults(selectedClass);
-  }, [selectedClass]);
+  }, [selectedClass, fetchClassResults]);
 
   return (
     <div className="space-y-6">

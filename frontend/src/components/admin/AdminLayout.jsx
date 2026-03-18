@@ -13,8 +13,7 @@ import {
   Settings,
   Bell,
   Menu,
-  ChevronDown,
-  User
+  ChevronDown
 } from 'lucide-react';
 
 const AdminLayout = ({ children, activeMenu, setActiveMenu }) => {

@@ -7,9 +7,7 @@ import {
   LogOut,
   Settings,
   Menu,
-  ChevronDown,
-  User,
-  Bell
+  ChevronDown
 } from 'lucide-react';
 
 const TeacherLayout = ({ children, activeMenu, setActiveMenu }) => {

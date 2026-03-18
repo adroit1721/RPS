@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { toast } from 'react-toastify';
 import { setClasses } from '../../../store/slices/adminSlice';
@@ -12,7 +12,7 @@ const ClassesManager = () => {
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState(null);
 
-  const fetchClasses = async () => {
+  const fetchClasses = useCallback(async () => {
     try {
       const res = await fetch('/api/classes', {
         headers: { 'Authorization': `Bearer ${user.token}` }
@@ -22,11 +22,11 @@ const ClassesManager = () => {
     } catch(err) {
       toast.error('Failed to load classes');
     }
-  };
+  }, [dispatch, user.token]);
 
   useEffect(() => {
     fetchClasses();
-  }, []);
+  }, [fetchClasses]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
