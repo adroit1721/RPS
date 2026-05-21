@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
+const { calculateGradeAndGPA, calculateOverallStatus } = require('../utils/gradeCalculator');
 const auth = require('../middleware/auth');
 const router = express.Router();
 
@@ -100,25 +101,31 @@ router.delete('/assignments/:id', auth(['admin']), async (req, res) => {
       }
     }
 
-    // 2. Cascade Delete: Remove marks for these subjects in this class from all Results
-    const Result = require('../models/Result');
-    const Student = require('../models/Student');
-    const students = await Student.find({ classId });
-    const studentIds = students.map(s => s._id);
-
-    // Update results: remove marks and recalculate totals
-    const resultsToUpdate = await Result.find({ student: { $in: studentIds } });
-    for (let result of resultsToUpdate) {
-      const originalCount = result.marks.length;
-      result.marks = result.marks.filter(m => !subjects.includes(m.subject));
-      
-      if (result.marks.length !== originalCount) {
-        // Recalculate totals
-        result.totalMarks = result.marks.reduce((acc, curr) => acc + curr.score, 0);
-        const hasFailed = result.marks.some(curr => curr.score < 40);
-        result.grade = result.marks.length > 0 ? (hasFailed ? 'F' : 'PASS') : 'N/A';
-        await result.save();
-      }
+    // 2. Cascade Update Results: remove marks for these subjects and recalculate
+    // Optimization: Bulk update using $pull and then we need to recalculate totalMarks/grade.
+    // MongoDB doesn't easily support recalculating fields based on an array length changes in a single $pull.
+    // So we'll fetch them, update them in memory, and use bulkWrite for speed.
+    const resultsToUpdate = await Result.find({ student: { $in: studentIds }, 'marks.subject': { $in: subjects } });
+    
+    if (resultsToUpdate.length > 0) {
+      const bulkOps = resultsToUpdate.map(result => {
+        result.marks = result.marks.filter(m => !subjects.includes(m.subject));
+        const status = calculateOverallStatus(result.marks);
+        
+        return {
+          updateOne: {
+            filter: { _id: result._id },
+            update: {
+              $set: {
+                marks: result.marks,
+                totalMarks: status.totalScore,
+                grade: result.marks.length > 0 ? (status.hasFailed ? 'F' : 'PASS') : 'N/A'
+              }
+            }
+          }
+        };
+      });
+      await Result.bulkWrite(bulkOps);
     }
 
     // 3. Delete the assignment document itself
@@ -218,7 +225,10 @@ router.get('/results/overview', auth(['admin']), async (req, res) => {
     const studentIds = students.map(s => s._id);
 
     // 2. Find results for these students
-    const results = await Result.find({ student: { $in: studentIds } })
+    const query = { student: { $in: studentIds } };
+    if (req.query.examId) query.exam = req.query.examId;
+
+    const results = await Result.find(query)
         .populate('student')
         .populate('exam');
         

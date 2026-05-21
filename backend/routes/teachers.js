@@ -1,9 +1,23 @@
 const express = require('express');
+const fs = require('fs');
+const csv = require('csv-parser');
+const multer = require('multer');
+const path = require('path');
 const bcrypt = require('bcryptjs');
 const Teacher = require('../models/Teacher');
 const Assignment = require('../models/Assignment');
+const Student = require('../models/Student');
+const Result = require('../models/Result');
+const { calculateGradeAndGPA, calculateOverallStatus } = require('../utils/gradeCalculator');
 const auth = require('../middleware/auth');
 const router = express.Router();
+
+// Configure Multer for CSV storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, 'uploads/'),
+  filename: (req, file, cb) => cb(null, `bulk-${Date.now()}-${file.originalname}`)
+});
+const upload = multer({ storage });
 
 
 // Get teacher's dashboard stats
@@ -100,7 +114,6 @@ router.delete('/:id', auth(['admin']), async (req, res) => {
     res.status(400).json({ err: err.message });
   }
 });
-const Result = require('../models/Result');
 
 // Get teacher's assignments
 router.get('/assignments', auth(['teacher']), async (req, res) => {
@@ -122,9 +135,6 @@ router.get('/marks', auth(['teacher']), async (req, res) => {
       return res.status(400).json({ msg: 'Missing required parameters' });
     }
 
-    const Student = require('../models/Student');
-    const Result = require('../models/Result');
-    
     // 1. Find all students in this class - the authoritative list
     const students = await Student.find({ classId }).sort({ roll: 1 });
     const studentIds = students.map(s => s._id);
@@ -168,13 +178,8 @@ router.post('/marks', auth(['teacher']), async (req, res) => {
     for (const m of marks) {
       const { studentId, score } = m;
       
-      // Calculate grade (matching frontend logic)
-      let grade = 'F';
-      if (score >= 80) grade = 'A+';
-      else if (score >= 70) grade = 'A';
-      else if (score >= 60) grade = 'A-';
-      else if (score >= 50) grade = 'B';
-      else if (score >= 40) grade = 'C';
+      // Calculate grade (matching global scale)
+      const { grade } = calculateGradeAndGPA(score);
       
       let result = await Result.findOne({ student: studentId, exam: examId });
       
@@ -188,21 +193,19 @@ router.post('/marks', auth(['teacher']), async (req, res) => {
           result.marks.push({ subject: subjectName, score, grade });
         }
         
-        // Recalculate Total and Final Grade (Simplistic for now)
-        result.totalMarks = result.marks.reduce((acc, curr) => acc + curr.score, 0);
-        // Basic final grade check (if any subject is < 40, fail)
-        const hasFailed = result.marks.some(curr => curr.score < 40);
-        result.grade = hasFailed ? 'F' : 'PASS'; // Need actual logic based on average GPA
-        
+        // Recalculate Total and Final Grade (Centralized logic)
+        const status = calculateOverallStatus(result.marks);
+        result.totalMarks = status.totalScore;
+        result.grade = status.hasFailed ? 'F' : 'PASS';
         await result.save();
       } else {
-        // Create new result document
+        const status = calculateOverallStatus([{ score }]);
         const newResult = new Result({
           student: studentId,
           exam: examId,
           marks: [{ subject: subjectName, score, grade }],
-          totalMarks: score,
-          grade: score < 40 ? 'F' : 'PASS',
+          totalMarks: status.totalScore,
+          grade: status.hasFailed ? 'F' : 'PASS',
           status: 'Pending Admin Review'
         });
         await newResult.save();
@@ -210,6 +213,70 @@ router.post('/marks', auth(['teacher']), async (req, res) => {
     }
     
     res.json({ msg: 'Marks submitted successfully' });
+  } catch (err) {
+    res.status(500).json({ err: err.message });
+  }
+});
+router.post('/bulk-marks', auth(['teacher']), upload.single('file'), async (req, res) => {
+  try {
+    const { examId, subjectName, classId } = req.body;
+    if (!req.file) return res.status(400).json({ msg: 'No file uploaded' });
+    
+    const results = [];
+    const filePath = path.join(__dirname, '..', req.file.path);
+
+    // 1. Parse CSV
+    fs.createReadStream(filePath)
+      .pipe(csv())
+      .on('data', (row) => results.push(row))
+      .on('end', async () => {
+        try {
+          // 2. Process each row
+          for (const row of results) {
+            const roll = parseInt(row.Roll || row.roll);
+            const score = parseInt(row.Marks || row.marks || row.Score || row.score);
+            
+            if (isNaN(roll) || isNaN(score)) continue;
+
+            const student = await Student.findOne({ classId, roll });
+            if (!student) continue;
+
+            // Calculate Grade
+            const { grade } = calculateGradeAndGPA(score);
+
+            let resultDoc = await Result.findOne({ student: student._id, exam: examId });
+
+            if (resultDoc) {
+              const subjectIndex = resultDoc.marks.findIndex(s => s.subject === subjectName);
+              if (subjectIndex > -1) {
+                resultDoc.marks[subjectIndex].score = score;
+                resultDoc.marks[subjectIndex].grade = grade;
+              } else {
+                resultDoc.marks.push({ subject: subjectName, score, grade });
+              }
+              const status = calculateOverallStatus(resultDoc.marks);
+              resultDoc.totalMarks = status.totalScore;
+              resultDoc.grade = status.hasFailed ? 'F' : 'PASS';
+              await resultDoc.save();
+            } else {
+              const status = calculateOverallStatus([{ score }]);
+              await Result.create({
+                student: student._id,
+                exam: examId,
+                marks: [{ subject: subjectName, score, grade }],
+                totalMarks: status.totalScore,
+                grade: status.hasFailed ? 'F' : 'PASS',
+                status: 'Pending Admin Review'
+              });
+            }
+          }
+          // Clean up file
+          fs.unlinkSync(filePath);
+          res.json({ msg: 'Bulk marks processed successfully' });
+        } catch (err) {
+          res.status(500).json({ err: err.message });
+        }
+      });
   } catch (err) {
     res.status(500).json({ err: err.message });
   }

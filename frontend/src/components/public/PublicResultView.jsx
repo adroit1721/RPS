@@ -1,28 +1,35 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { 
-  GraduationCap, 
-  ShieldCheck, 
-  UserCircle
+import {
+  GraduationCap,
+  ShieldCheck,
+  UserCircle,
+  Award,
+  Calendar,
+  User,
+  MapPin,
+  Mail,
+  Printer
 } from 'lucide-react';
 
-// Helper function to calculate Grade from Total Marks
-const calculateGrade = (total, maxScore = 100) => {
-  const percentage = (total / maxScore) * 100;
-  if (percentage >= 80) return { grade: 'A+', gpa: 5.0, remarks: 'Outstanding' };
-  if (percentage >= 70) return { grade: 'A', gpa: 4.0, remarks: 'Excellent' };
-  if (percentage >= 60) return { grade: 'A-', gpa: 3.5, remarks: 'Very Good' };
-  if (percentage >= 50) return { grade: 'B', gpa: 3.0, remarks: 'Good' };
-  if (percentage >= 40) return { grade: 'C', gpa: 2.0, remarks: 'Pass' };
-  if (percentage >= 33) return { grade: 'D', gpa: 1.0, remarks: 'Pass' };
+// Helper function to calculate Grade from Total Marks (5.0 Scale)
+const calculateGrade = (score) => {
+  if (score >= 80) return { grade: 'A+', gpa: 5.0, remarks: 'Outstanding' };
+  if (score >= 70) return { grade: 'A', gpa: 4.0, remarks: 'Excellent' };
+  if (score >= 60) return { grade: 'A-', gpa: 3.5, remarks: 'Very Good' };
+  if (score >= 50) return { grade: 'B', gpa: 3.0, remarks: 'Good' };
+  if (score >= 40) return { grade: 'C', gpa: 2.0, remarks: 'Pass' };
+  if (score >= 33) return { grade: 'D', gpa: 1.0, remarks: 'Pass' };
   return { grade: 'F', gpa: 0.0, remarks: 'Fail' };
 };
 
-const PublicResultView = ({ setView }) => {
+const PublicResultView = () => {
   const [classes, setClasses] = useState([]);
   const [exams, setExams] = useState([]);
+  const [school, setSchool] = useState({ name: 'School Name', address: '', email: '', logoUrl: '', signatureUrl: '' });
 
   const [form, setForm] = useState({
     session: new Date().getFullYear().toString(),
@@ -40,6 +47,7 @@ const PublicResultView = ({ setView }) => {
   useEffect(() => {
     generateCaptcha();
     fetchClasses();
+    fetchSchoolData();
   }, []);
 
   const generateCaptcha = () => {
@@ -59,9 +67,17 @@ const PublicResultView = ({ setView }) => {
     }
   };
 
+  const fetchSchoolData = async () => {
+    try {
+      const res = await fetch('/api/school');
+      if (res.ok) setSchool(await res.json());
+    } catch (err) {
+      console.error('Error fetching school data');
+    }
+  };
+
   const fetchExamsForClass = async (classId) => {
     try {
-      // Only fetch published exams
       const res = await fetch(`/api/public/published-exams?classId=${classId}`);
       if (res.ok) setExams(await res.json());
     } catch (err) {
@@ -78,7 +94,6 @@ const PublicResultView = ({ setView }) => {
   const handleSearch = async (e) => {
     e.preventDefault();
 
-    // Verify Captcha
     if (parseInt(form.captchaInput) !== (captchaMath.num1 + captchaMath.num2)) {
       toast.error('Incorrect CAPTCHA answer. Please try again.');
       generateCaptcha();
@@ -99,7 +114,16 @@ const PublicResultView = ({ setView }) => {
       const data = await res.json();
 
       if (res.ok && data) {
-        setResultData(data);
+        // Apply "Fail in one = Fail all" logic
+        const hasFailed = data.marks.some(m => m.score < 33);
+        const totalGPA = hasFailed ? 0 : (data.marks.reduce((acc, m) => acc + calculateGrade(m.score).gpa, 0) / data.marks.length);
+
+        setResultData({
+          ...data,
+          hasFailed,
+          calculatedGPA: totalGPA.toFixed(2),
+          finalGrade: hasFailed ? 'Fail' : calculateOverallGrade(totalGPA)
+        });
       } else {
         toast.error(data.msg || 'Result not found. Please check your details.');
         generateCaptcha();
@@ -111,16 +135,25 @@ const PublicResultView = ({ setView }) => {
     }
   };
 
+  const calculateOverallGrade = (gpa) => {
+    if (gpa >= 5.0) return 'A+';
+    if (gpa >= 4.0) return 'A';
+    if (gpa >= 3.5) return 'A-';
+    if (gpa >= 3.0) return 'B';
+    if (gpa >= 2.0) return 'C';
+    if (gpa >= 1.0) return 'D';
+    return 'F';
+  };
+
   const handleDownloadPDF = async () => {
     const marksheetElement = document.getElementById('marksheet-content');
     if (!marksheetElement) return;
 
     try {
-      const toastId = toast.loading('Generating High-Resolution Transcript...');
+      const toastId = toast.loading('Generating High-Resolution Certificate...');
 
-      // Capture the full element without hard-coding dimensions to avoid cropping
       const canvas = await html2canvas(marksheetElement, {
-        scale: 3, // Higher scale for ultra-sharp text
+        scale: 3,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
@@ -141,21 +174,16 @@ const PublicResultView = ({ setView }) => {
       const pdfRatio = pdfWidth / pdfHeight;
 
       let finalWidth, finalHeight;
-
-      // Smart scaling: Ensure it fits A4 without cropping or squashing
       if (contentRatio > pdfRatio) {
-        // Limited by width
         finalWidth = pdfWidth;
         finalHeight = pdfWidth / contentRatio;
       } else {
-        // Limited by height (this is usually the case when it's cropping at the bottom)
         finalHeight = pdfHeight;
         finalWidth = pdfHeight * contentRatio;
       }
 
-      // Center horizontally
       const xPos = (pdfWidth - finalWidth) / 2;
-      const yPos = 0; // Align to top
+      const yPos = 0;
 
       pdf.addImage(imgData, 'PNG', xPos, yPos, finalWidth, finalHeight, undefined, 'FAST');
 
@@ -163,7 +191,7 @@ const PublicResultView = ({ setView }) => {
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
 
-      toast.update(toastId, { render: 'Transcript opened in new tab!', type: 'success', isLoading: false, autoClose: 3000 });
+      toast.update(toastId, { render: 'Certificate opened in new tab!', type: 'success', isLoading: false, autoClose: 3000 });
     } catch (err) {
       console.error(err);
       toast.error('Failed to generate PDF');
@@ -171,17 +199,17 @@ const PublicResultView = ({ setView }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] py-12 px-4 sm:px-6 lg:px-8 font-['Outfit']">
+    <div className="min-h-screen bg-slate-50 py-8 px-3 sm:px-6 lg:px-8 font-['Outfit']">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&family=Playfair+Display:ital,wght@0,900;1,900&family=JetBrains+Mono:wght@700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&family=Playfair+Display:ital,wght@0,700..900;1,700..900&display=swap');
         
         .marksheet-border {
-          border: 12px double #1e293b;
-          padding: 2px;
+          border: 15px double #0f172a;
+          padding: 4px;
           position: relative;
         }
         .marksheet-inner-border {
-          border: 2px solid #1e293b;
+          border: 2px solid #0f172a;
           height: 100%;
           width: 100%;
         }
@@ -190,322 +218,327 @@ const PublicResultView = ({ setView }) => {
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%) rotate(-45deg);
-          font-size: 10rem;
-          color: rgba(30, 41, 59, 0.03);
+          font-size: 8rem;
+          color: rgba(15, 23, 42, 0.04);
           font-weight: 900;
           pointer-events: none;
           white-space: nowrap;
           z-index: 0;
+          text-transform: uppercase;
+        }
+        .cert-seal {
+          width: 100px;
+          height: 100px;
+          border: 4px double #0f172a;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          opacity: 0.15;
+          transform: rotate(15deg);
         }
       `}</style>
 
-      {/* Header Area */}
-      <div className="max-w-4xl mx-auto text-center mb-12">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-full shadow-lg mb-6 border-4 border-indigo-100 transform hover:scale-110 transition-transform duration-300">
-          <span className="text-4xl text-indigo-600">🎓</span>
+      {/* Hero Header Area */}
+      <div className="max-w-4xl mx-auto text-center mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
+        <div className="inline-flex items-center justify-center p-4 bg-white rounded-3xl shadow-xl shadow-indigo-100/50 mb-6 border border-slate-100">
+          <GraduationCap size={48} className="text-indigo-600" />
         </div>
-        <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
-          Academic <span className="text-indigo-600">Marksheet</span> Portal
+        <h1 className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+          Academic <span className="bg-gradient-to-r from-indigo-600 to-indigo-400 bg-clip-text text-transparent italic">Result</span> Portal
         </h1>
-        <p className="mt-4 text-slate-500 font-medium">Get Result with your Roll Number</p>
+        <div className="mt-4 flex items-center justify-center space-x-2 text-slate-400 font-bold uppercase tracking-widest text-[10px]">
+          <ShieldCheck size={14} className="text-emerald-500" />
+          <span>Official Verification System</span>
+        </div>
       </div>
 
       <div className="max-w-4xl mx-auto space-y-12">
-        {/* Search Panel - Single Page Centered Design */}
-        <div className="w-full">
-          <div className="bg-white rounded-[2.5rem] shadow-2xl shadow-indigo-100/50 border border-slate-100 p-8 md:p-12 hover:shadow-indigo-200/50 transition-all duration-500">
-            <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
-              <h2 className="text-3xl font-black text-slate-800 flex items-center">
-                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-xl shadow-lg shadow-indigo-100 italic">?</div>
-                Search Result
-              </h2>
-            </div>
+        {/* Search Panel - Premium Glassmorphism Design */}
+        <div className="bg-white/70 backdrop-blur-xl rounded-[3rem] shadow-2xl shadow-indigo-100/40 border border-white p-8 md:p-12 transition-all hover:shadow-indigo-200/40 duration-500">
+          <div className="flex items-center space-x-4 mb-10">
+            <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-xl shadow-lg italic">?</div>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Access Your Records</h2>
+          </div>
 
-            <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Session Year</label>
+          <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-[.2em] text-slate-400 ml-1">Academic Session</label>
+              <div className="relative group">
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
                 <input
                   type="text" value={form.session} onChange={e => setForm({ ...form, session: e.target.value })}
-                  className="w-full p-5 border-2 border-slate-50 rounded-[1.25rem] bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700 shadow-sm"
+                  className="w-full pl-12 pr-6 py-5 bg-slate-50/50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700 shadow-sm"
                   required
                 />
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Academic Class</label>
-                <select
-                  value={form.classId} onChange={handleClassChange}
-                  className="w-full p-5 border-2 border-slate-50 rounded-[1.25rem] bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700 shadow-sm custom-select"
-                  required
-                >
-                  <option value="" disabled>Select Class</option>
-                  {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                </select>
-              </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-[.2em] text-slate-400 ml-1">Student Class</label>
+              <select
+                value={form.classId} onChange={handleClassChange}
+                className="w-full p-5 bg-slate-50/50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700 shadow-sm custom-select"
+                required
+              >
+                <option value="" disabled>Select Class</option>
+                {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+              </select>
+            </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Examination Title</label>
-                <select
-                  value={form.examId} onChange={e => setForm({ ...form, examId: e.target.value })}
-                  className="w-full p-5 border-2 border-slate-50 rounded-[1.25rem] bg-slate-50/50 focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700 shadow-sm disabled:opacity-50"
-                  required
-                  disabled={!form.classId || exams.length === 0}
-                >
-                  <option value="" disabled>{!form.classId ? 'Select class first' : (exams.length === 0 ? 'No published exams' : 'Select Exam')}</option>
-                  {exams.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
-                </select>
-              </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-[.2em] text-slate-400 ml-1">Specific Examination</label>
+              <select
+                value={form.examId} onChange={e => setForm({ ...form, examId: e.target.value })}
+                className="w-full p-5 bg-slate-50/50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700 shadow-sm disabled:opacity-50"
+                required
+                disabled={!form.classId || exams.length === 0}
+              >
+                <option value="" disabled>{!form.classId ? 'Select class first' : (exams.length === 0 ? 'No published exams' : 'Select Term/Exam')}</option>
+                {exams.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}
+              </select>
+            </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Student Roll Number</label>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase tracking-[.2em] text-slate-400 ml-1">Student Roll ID</label>
+              <div className="relative group">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={20} />
                 <input
                   type="number" value={form.roll} onChange={e => setForm({ ...form, roll: e.target.value })}
-                  className="w-full p-5 border-2 border-slate-50 rounded-[1.25rem] bg-indigo-50/30 focus:bg-white focus:border-indigo-500 outline-none transition-all font-['JetBrains_Mono'] text-2xl font-black text-indigo-700 placeholder:text-indigo-200 shadow-sm"
+                  className="w-full pl-12 pr-6 py-5 bg-indigo-50/20 border-2 border-indigo-100/50 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-black text-indigo-700 text-xl placeholder:text-indigo-200 shadow-sm"
                   placeholder="00"
                   required
                 />
               </div>
+            </div>
 
-              {/* CAPTCHA - Full width on mobile/tablet, part of grid on desktop */}
-              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-slate-900/5 p-6 md:p-8 rounded-[2rem] border border-slate-100">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest mb-2">Human Verification Required</p>
-                  <div className="text-3xl font-black text-slate-800 tracking-widest italic flex items-center gap-4">
-                    <span className="bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">{captchaMath.num1}</span>
-                    <span className="text-slate-400">+</span>
-                    <span className="bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-100">{captchaMath.num2}</span>
-                    <span className="text-slate-400">=</span>
-                  </div>
-                </div>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={form.captchaInput} onChange={e => setForm({ ...form, captchaInput: e.target.value })}
-                    className="w-full p-6 text-center bg-white border-4 border-indigo-100 text-indigo-600 rounded-[1.5rem] focus:border-indigo-500 outline-none font-black text-3xl placeholder:text-indigo-200 shadow-sm"
-                    placeholder="?"
-                    required
-                  />
+            <div className="md:col-span-2 bg-slate-900/5 p-8 rounded-[2rem] border border-slate-100/50 flex flex-col md:flex-row items-center gap-8">
+              <div className="flex-1">
+                <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest mb-3">Mathematical Challenge (Security)</p>
+                <div className="flex items-center gap-4 text-3xl font-black text-slate-800 italic">
+                  <span className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100">{captchaMath.num1}</span>
+                  <span className="text-slate-300">+</span>
+                  <span className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-slate-100">{captchaMath.num2}</span>
+                  <span className="text-slate-300">=</span>
                 </div>
               </div>
+              <input
+                type="number"
+                value={form.captchaInput} onChange={e => setForm({ ...form, captchaInput: e.target.value })}
+                className="w-full md:w-32 p-6 text-center bg-white border-4 border-indigo-50 text-indigo-600 rounded-3xl focus:border-indigo-500 outline-none font-black text-3xl shadow-inner-lg"
+                placeholder="?"
+                required
+              />
+            </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="md:col-span-2 group relative overflow-hidden bg-slate-900 text-white px-10 py-6 rounded-[1.5rem] font-black text-xl transition-all hover:shadow-2xl hover:shadow-indigo-200 active:scale-[0.98] disabled:opacity-50"
-              >
-                <span className="relative z-10 flex items-center justify-center gap-3">
-                  {loading ? (
-                    <>
-                      <svg className="animate-spin h-6 w-6 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Authenticating Records...
-                    </>
-                  ) : (
-                    <>
-                      View Marksheet
-                      <svg className="w-6 h-6 transform transition-transform group-hover:translate-x-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                      </svg>
-                    </>
-                  )}
-                </span>
-                <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              </button>
-            </form>
-          </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="md:col-span-2 relative group overflow-hidden bg-slate-900 text-white py-6 rounded-3xl font-black text-lg uppercase tracking-[.2em] transition-all hover:bg-slate-800 active:scale-95 disabled:opacity-50 shadow-2xl shadow-slate-200/50"
+            >
+              <span className="relative z-10 flex items-center justify-center gap-4">
+                {loading ? 'Authenticating...' : 'Generate Official Transcript'}
+                {!loading && <Award size={22} className="group-hover:rotate-12 transition-transform" />}
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-indigo-500 opacity-0 group-hover:opacity-10 transition-opacity" />
+            </button>
+          </form>
         </div>
 
-        {/* Result Display Panel - Centered Flow */}
-        <div className="w-full">
-          {resultData ? (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
-              <div className="flex flex-col md:flex-row justify-between items-center bg-indigo-600 p-6 md:p-8 rounded-[2.5rem] shadow-2xl shadow-indigo-200 text-white gap-6">
-                <div className="flex flex-col md:flex-row items-center gap-4 text-center md:text-left">
-                  <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-3xl">✨</div>
-                  <div>
-                    <h3 className="text-xl font-black">Official Result Found</h3>
-                    <p className="text-white/70 font-bold text-sm tracking-wide">Transcript ready for digital verification & print</p>
-                  </div>
+        {/* Result & Certificate Presentation */}
+        {resultData && (
+          <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+            {/* Action Bar */}
+            <div className="bg-gradient-to-r from-indigo-700 to-blue-800 p-8 rounded-[3rem] shadow-2xl flex flex-col md:flex-row items-center justify-between gap-8 text-white">
+              <div className="flex items-center gap-6">
+                <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center animate-pulse">✨</div>
+                <div>
+                  <h3 className="text-2xl font-black leading-none mb-1 text-white">Transcript Ready</h3>
+                  <p className="text-white/60 text-sm font-bold tracking-wide">Academic Year {resultData.student.session}</p>
                 </div>
-                <button
-                  onClick={handleDownloadPDF}
-                  className="w-full md:w-auto group flex items-center justify-center space-x-3 bg-white text-indigo-600 hover:bg-slate-900 hover:text-white px-10 py-5 rounded-2xl font-black shadow-xl transition-all active:scale-95"
-                >
-                  <svg className="w-6 h-6 transition-transform group-hover:-translate-y-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4" />
-                  </svg>
-                  <span>Print as PDF</span>
-                </button>
               </div>
+              <button
+                onClick={handleDownloadPDF}
+                className="group flex items-center gap-4 bg-white text-indigo-900 hover:bg-slate-900 hover:text-white px-10 py-5 rounded-[1.5rem] font-black shadow-2xl transition-all active:scale-95"
+              >
+                <Printer size={22} />
+                <span>Download Secure PDF</span>
+              </button>
+            </div>
 
-              {/* Marksheet Preview - Standard A4 210mm x 297mm */}
-              <div className="overflow-x-auto pb-12 flex justify-center bg-slate-50/50 rounded-[3rem] p-4 md:p-8 border border-slate-100">
-                <div
-                  id="marksheet-content"
-                  className="bg-white marksheet-border shadow-2xl relative"
-                  style={{
-                    width: '210mm',
-                    minHeight: '270mm',
-                    padding: '10mm',
-                    backgroundColor: '#fff',
-                    flexShrink: 0
-                  }}
-                >
-                  <div className="marksheet-inner-border p-8 relative overflow-visible flex flex-col h-full bg-white">
-                    <div className="watermark uppercase italic">Official Copy</div>
+            {/* The Certificate - Official Copy */}
+            <div className="overflow-x-auto pb-8 flex justify-center">
+              <div
+                id="marksheet-content"
+                className="bg-white marksheet-border relative shadow-2xl"
+                style={{
+                  width: '210mm',
+                  minHeight: '297mm',
+                  padding: '12mm',
+                  flexShrink: 0
+                }}
+              >
+                <div className="marksheet-inner-border p-10 relative flex flex-col h-full overflow-hidden">
+                  <div className="watermark uppercase italic">{school.name}</div>
 
-                    {/* Header - Compact for A4 */}
-                    <div className="text-center border-b-2 border-slate-900 pb-6 mb-8 relative z-10">
-                      <div className="flex items-center justify-center mb-4">
-                        <div className="w-20 h-20 bg-slate-900 text-white rounded-full flex items-center justify-center text-3xl font-black shadow-lg">RHHS</div>
+
+                  {/* Institution Header */}
+                  <div className="text-center border-b-4 border-slate-900 pb-8 mb-10 relative z-10">
+                    <div className="flex justify-between items-center mb-6">
+                      <div className="w-24 h-24 bg-slate-50 p-2 rounded-2xl flex items-center justify-center">
+                        {school.logoUrl ? (
+                          <img src={school.logoUrl} alt="Logo" className="max-w-full max-h-full object-contain" />
+                        ) : (
+                          <div className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center text-white text-2xl font-black uppercase">{school.name?.charAt(0)}</div>
+                        )}
                       </div>
-                      <h1 className="text-4xl font-['Playfair_Display'] font-black text-slate-900 tracking-tighter uppercase mb-1">Rajabari Hat High School</h1>
-                      <p className="text-slate-500 font-bold tracking-[0.2em] text-[10px] uppercase">Rajabri Hat, Godagari, Rajshahi || Email:rajabarihhighschool@gmail.com</p>
-                      <div className="mt-4">
-                        <span className="bg-slate-900 text-white px-10 py-2.5 rounded-full font-black text-xs tracking-[0.3em] uppercase shadow-md">
-                          Academic Transcript
+                      <div className="flex-1 px-8">
+                        <h1 className="text-4xl font-['Playfair_Display'] font-black text-slate-900 tracking-tight uppercase leading-none mb-2">{school.name}</h1>
+                        <p className="text-slate-500 font-black tracking-[0.25em] text-[10px] uppercase mb-1 flex items-center justify-center gap-2">
+                          <MapPin size={10} className="text-indigo-600" /> {school.address || 'Institution Address'}
+                        </p>
+                        <p className="text-slate-400 font-bold tracking-[0.1em] text-[10px] flex items-center justify-center gap-2">
+                          <Mail size={10} className="text-indigo-600" /> {school.email || 'Educational Affairs Office'}
+                        </p>
+                      </div>
+                      <div className="w-24 h-24 cert-seal">
+                        <span className="text-[10px] font-black uppercase text-slate-800 tracking-tighter">OFFICIAL SEAL</span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="inline-block bg-slate-900 text-white px-12 py-3.5 rounded-full font-black text-sm tracking-[0.4em] uppercase shadow-lg">
+                        Academic Transcript
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Identity Grid */}
+                  <div className="grid grid-cols-2 gap-x-12 gap-y-6 mb-12 relative z-10 border-b-2 border-slate-50 pb-8">
+                    {[
+                      { label: 'Student Full Name', value: resultData.student.name.toUpperCase() },
+                      { label: 'Father\'s Name', value: resultData.student.fatherName.toUpperCase() },
+                      { label: 'Enrollment Roll', value: resultData.student.roll, highlight: true },
+                      { label: 'Class / Grade', value: resultData.classData.name },
+                      { label: 'Subject / Department', value: 'Regular Education Selection' },
+                      { label: 'Examination Period', value: resultData.exam.name, full: true }
+                    ].map((item, idx) => (
+                      <div key={idx} className={`${item.full ? 'col-span-2' : ''} flex flex-col`}>
+                        <span className="text-[8px] font-black uppercase text-slate-400 tracking-[0.3em] mb-1.5">{item.label}</span>
+                        <span className={`text-xl font-bold text-slate-900 border-b-2 border-slate-100 pb-1 ${item.highlight ? 'text-indigo-600 font-black' : ''}`}>
+                          {item.value || 'N/A'}
                         </span>
                       </div>
-                    </div>
+                    ))}
+                  </div>
 
-                    {/* Student Info Grid - Compact */}
-                    <div className="grid grid-cols-2 gap-x-12 gap-y-4 mb-8 relative z-10">
-                      {[
-                        { label: 'Student Name', value: resultData.student.name.toUpperCase() },
-                        { label: 'Roll Number', value: resultData.student.roll, mono: true },
-                        { label: 'Academic Session', value: resultData.student.session },
-                        { label: 'Class/Grade', value: resultData.classData.name },
-                        { label: 'Father\'s Name', value: resultData.student.fatherName },
-                        { label: 'Mother\'s Name', value: resultData.student.motherName },
-                        { label: 'Examination', value: resultData.exam.name, full: true }
-                      ].map((item, idx) => (
-                        <div key={idx} className={`${item.full ? 'col-span-2' : ''} flex flex-col border-b border-slate-100 pb-2`}>
-                          <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-1">{item.label}</span>
-                          <span className={`text-lg font-black text-slate-900 ${item.mono ? 'font-[\'JetBrains_Mono\'] text-indigo-700' : ''}`}>{item.value}</span>
-                        </div>
-                      ))}
-                    </div>
+                  {/* Academic Performance Matrix */}
+                  <div className="flex-grow mb-10 relative z-10">
+                    <table className="w-full border-collapse border-4 border-slate-900">
+                      <thead className="bg-slate-900 text-white">
+                        <tr>
+                          <th className="p-5 text-left font-black uppercase tracking-[0.2em] text-[10px] border-r border-white/20">Subject</th>
+                          <th className="p-5 text-center font-black uppercase tracking-[0.2em] text-[10px] border-r border-white/20 w-32">Marks</th>
+                          <th className="p-5 text-center font-black uppercase tracking-[0.2em] text-[10px] border-r border-white/20 w-32">Obtained Marks</th>
+                          <th className="p-5 text-center font-black uppercase tracking-[0.2em] text-[10px] border-r border-white/20 w-24">Grade</th>
+                          <th className="p-5 text-center font-black uppercase tracking-[0.2em] text-[10px] w-24">GPA Point</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y-2 divide-slate-100 font-['Outfit']">
+                        {resultData.marks.map((m, i) => {
+                          const assessment = calculateGrade(m.score);
+                          return (
+                            <tr key={i} className={i % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                              <td className="p-5 font-black text-slate-800 text-lg uppercase leading-none">{m.subject}</td>
+                              <td className="p-5 text-center font-bold text-slate-400 text-lg tracking-tighter italic">100.00</td>
+                              <td className="p-5 text-center font-black text-indigo-700 text-2xl tracking-tighter">{m.score}</td>
+                              <td className={`p-5 text-center font-black text-xl ${assessment.grade === 'F' ? 'text-rose-600' : 'text-slate-900'}`}>{assessment.grade}</td>
+                              <td className="p-5 text-center font-black text-slate-700 text-lg">{assessment.gpa.toFixed(2)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
 
-                    {/* Main Marks Table - Optimized Padding */}
-                    <div className="flex-grow relative z-10">
-                      <table className="w-full border-collapse border-[3px] border-slate-900 text-left">
-                        <thead className="bg-slate-900 text-white">
-                          <tr>
-                            <th className="p-4 border-r border-white/20 font-black uppercase tracking-widest text-[10px]">Subject Name</th>
-                            <th className="p-4 border-r border-white/20 text-center font-black uppercase tracking-widest text-[10px] w-28">Full Marks</th>
-                            <th className="p-4 border-r border-white/20 text-center font-black uppercase tracking-widest text-[10px] w-28">Obtained</th>
-                            <th className="p-4 border-r border-white/20 text-center font-black uppercase tracking-widest text-[10px] w-20">Grade</th>
-                            <th className="p-4 text-center font-black uppercase tracking-widest text-[10px] w-20">GPA</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {resultData.marks.map((m, i) => {
-                            const assessment = calculateGrade(m.score);
-                            return (
-                              <tr key={i} className={`border-b border-slate-200 ${i % 2 === 0 ? 'bg-slate-50/50' : 'bg-white'}`}>
-                                <td className="p-4 border-r-2 border-slate-200 font-bold text-slate-800 text-base uppercase">{m.subject}</td>
-                                <td className="p-4 border-r-2 border-slate-200 text-center font-bold text-slate-400 text-base">100</td>
-                                <td className="p-4 border-r-2 border-slate-200 text-center font-black text-indigo-700 text-xl">{m.score}</td>
-                                <td className="p-4 border-r-2 border-slate-200 text-center font-black text-slate-800 text-lg">{assessment.grade}</td>
-                                <td className="p-4 text-center font-black text-slate-600 text-base">{assessment.gpa.toFixed(2)}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Footer Summary - Reduced Vertical Footprint */}
-                    <div className="mt-8 mb-10 relative z-10">
-                      <div className="grid grid-cols-3 border-[3px] border-slate-900 rounded-[1.5rem] overflow-hidden shadow-lg shadow-slate-100">
-                        <div className="bg-slate-50 p-6 text-center border-r-[3px] border-slate-900">
-                          <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Total Marks</p>
-                          <p className="text-4xl font-black text-slate-900">{resultData.totalMarks}</p>
+                  {/* Evaluation Summary */}
+                  <div className="grid grid-cols-2 gap-10 mb-12 relative z-10 p-10 bg-slate-900 rounded-[2.5rem] text-white shadow-2xl">
+                    <div className="space-y-6">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.4em] opacity-40 mb-2">Cumulative Grade Point</p>
+                        <p className="text-7xl font-black italic flex items-baseline">
+                          {resultData.calculatedGPA}
+                          <span className="text-xl opacity-20 ml-3 italic">/ 5.00</span>
+                        </p>
+                      </div>
+                      <div className="flex gap-10">
+                        <div>
+                          <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Total Marks</p>
+                          <p className="text-2xl font-bold">{resultData.totalMarks}</p>
                         </div>
-                        <div className="bg-white p-6 text-center border-r-[3px] border-slate-900">
-                          <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Final GPA Score</p>
-                          <p className="text-4xl font-black text-indigo-600">
-                            {(resultData.marks.reduce((acc, m) => acc + calculateGrade(m.score).gpa, 0) / resultData.marks.length).toFixed(2)}
-                          </p>
-                        </div>
-                        <div className={`p-6 text-center flex flex-col items-center justify-center ${resultData.grade === 'F' ? 'bg-red-50' : 'bg-emerald-50'}`}>
-                          <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest">Final Status</p>
-                          <p className={`text-3xl font-black tracking-tighter ${resultData.grade === 'F' ? 'text-red-600' : 'text-emerald-600'}`}>
-                            {resultData.grade === 'F' ? 'FAILED' : 'PASSED'}
-                          </p>
+                        <div>
+                          <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Subject Count</p>
+                          <p className="text-2xl font-bold">{resultData.marks.length}</p>
                         </div>
                       </div>
                     </div>
+                    <div className="bg-white/10 p-8 rounded-[2rem] border border-white/10 flex flex-col items-center justify-center text-center">
+                      <p className="text-[11px] font-black uppercase tracking-[0.4em] opacity-60 mb-4">Academic Status</p>
+                      <p className={`text-5xl font-black italic tracking-tighter ${resultData.hasFailed ? 'text-rose-400 animate-pulse' : 'text-emerald-400 italic underline decoration-8 underline-offset-8'}`}>
+                        {resultData.hasFailed ? 'FAILED' : 'PASSED'}
+                      </p>
+                      {resultData.hasFailed && <p className="mt-4 text-[9px] font-black bg-rose-500 text-white px-4 py-1 rounded-full uppercase">Review Required</p>}
+                    </div>
+                  </div>
 
-                    {/* Authenticity & Signatures - Compacted */}
-                    <div className="mt-auto flex justify-between items-end relative z-10">
-                      <div className="w-48">
-                        <div className="w-24 h-24 bg-slate-50 border-2 border-slate-200 rounded-2xl flex flex-col items-center justify-center mb-3 relative opacity-60">
-                          <span className="text-[8px] font-black absolute top-2 tracking-tighter text-slate-400">VERIFY DOCUMENT</span>
-                          <div className="w-12 h-12 border-2 border-dashed border-slate-300 rounded-lg" />
-                          <span className="text-[7px] font-black mt-2 text-slate-300">SECURE-ID-{resultData.student._id?.slice(-6).toUpperCase()}</span>
+                  {/* Authentication & Authority */}
+                  <div className="mt-auto pt-10 flex justify-between items-end relative z-10 border-t border-slate-100">
+                    <div className="max-w-[240px]">
+                      <div className="bg-slate-50 border-2 border-dashed border-slate-100 rounded-3xl p-6 mb-4 relative flex flex-col items-center">
+                        <span className="text-[8px] font-black text-slate-300 absolute top-2 uppercase tracking-widest leading-none">Record Verification Hash</span>
+                        <div className="mt-2 text-center">
+                          <p className="text-[10px] font-mono font-black text-slate-400 break-all leading-tight">SHA256:{resultData.student._id?.slice(-12).toUpperCase()}</p>
+                          <div className="mt-3 w-16 h-16 border-4 border-white shadow-md rounded-xl bg-slate-200" />
                         </div>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Date: {new Date().toLocaleDateString('en-GB')}</p>
                       </div>
+                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-[0.3em]">Date of Issue: {new Date().toLocaleDateString('en-GB')}</p>
+                    </div>
 
-                      <div className="text-center w-56 flex flex-col items-center">
-                        <div className="w-48 border-b-2 border-slate-900 mb-2 font-['Playfair_Display'] text-xl font-black italic text-slate-200 h-10 flex items-center justify-center">
-                          Signature
-                        </div>
-                        <p className="text-[10px] font-black uppercase text-slate-900 tracking-[0.2em]">Headmaster / Principal</p>
-                      </div>
-
-                      <div className="absolute right-0 top-[-80px] w-32 h-32 border-[4px] border-slate-100 rounded-full flex items-center justify-center opacity-40 transform rotate-12">
-                        <div className="text-center">
-                          <p className="text-[8px] font-black tracking-tighter text-slate-300 uppercase">Academic Council</p>
-                          <p className="text-[14px] font-black text-slate-400 tracking-tighter">CERTIFIED</p>
-                          <p className="text-[8px] font-black tracking-tighter text-slate-300 uppercase">Original Copy</p>
-                        </div>
+                    <div className="text-center">
+                      <div className="w-56 h-28 relative flex flex-col items-center justify-center mb-2">
+                        {school.signatureUrl && (
+                          <img src={school.signatureUrl} alt="Signature" className="w-full h-full object-contain mb-[-20px] relative z-20 grayscale brightness-90 hover:grayscale-0 transition-all duration-500" />
+                        )}
+                        <div className="w-full border-b-2 border-slate-900 relative z-10" />
+                        <p className="mt-3 text-[10px] font-black uppercase text-slate-900 tracking-[0.3em]">Institutional Head Signature</p>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="bg-white/40 rounded-[3rem] border-4 border-dashed border-slate-200 h-96 flex flex-col items-center justify-center p-12 text-center group transition-colors hover:border-indigo-200">
-              <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-xl shadow-slate-100 mb-6 border border-slate-100 transition-transform group-hover:scale-110 group-hover:rotate-12 duration-500">
-                <GraduationCap size={48} className="text-indigo-600" strokeWidth={1.5} />
-              </div>
-              <p className="text-slate-400 font-bold max-w-xs leading-relaxed uppercase tracking-widest text-xs">
-                Enter roll & select exam to reveal academic records
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Custom Portal Links - Highly Professional Footer */}
-        <div className="pt-12 border-t border-slate-200 flex flex-col md:flex-row items-center justify-between gap-8 pb-12 opacity-60 hover:opacity-100 transition-opacity">
-          <div className="flex items-center space-x-2 text-slate-400">
-            <ShieldCheck size={20} className="text-emerald-500" />
-            <p className="text-[10px] font-black uppercase tracking-[0.2em]">Secure Academic Infrastructure</p>
           </div>
+        )}
 
-          <div className="flex items-center space-x-6">
-            <a
-              href="/?login=admin"
-              className="flex items-center space-x-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-indigo-600 transition-colors"
-            >
-              <UserCircle size={14} />
-              <span>Admin Portal</span>
-            </a>
-            <div className="w-1 h-1 bg-slate-200 rounded-full" />
-            <a
-              href="/?login=teacher"
-              className="flex items-center space-x-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-indigo-600 transition-colors"
-            >
-              <UserCircle size={14} />
-              <span>Teacher Access</span>
-            </a>
-            <div className="w-1 h-1 bg-slate-200 rounded-full" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">© 2026 SCHOOL PORTAL</span>
+
+        {!resultData && (
+          <div className="bg-white/40 rounded-[3.5rem] border-4 border-dashed border-slate-200 h-96 flex flex-col items-center justify-center p-12 text-center group active:scale-[0.98] transition-all duration-500">
+            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-2xl shadow-slate-100 mb-8 border border-slate-50 group-hover:scale-110 group-hover:rotate-12 duration-700">
+              <GraduationCap size={44} className="text-indigo-200 group-hover:text-indigo-600 transition-colors" />
+            </div>
+            <p className="text-slate-400 font-black max-w-xs leading-relaxed uppercase tracking-[0.3em] text-[10px]">
+              Enter Student Roll Number & Select Session to Access Archives
+            </p>
+          </div>
+        )}
+
+        {/* Global Professional Footer */}
+        <div className="pt-20 pb-12 opacity-30 hover:opacity-100 transition-opacity duration-700 text-center">
+          <div className="flex items-center justify-center space-x-4 mb-6">
+            <Link to="/login" className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-indigo-600 transition-colors">Admin Gateway</Link>
+            <div className="w-1 h-1 bg-slate-300 rounded-full" />
+            <Link to="/login" className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-indigo-600 transition-colors">Teacher Portal</Link>
+            <div className="w-1 h-1 bg-slate-300 rounded-full" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Academic Archives © 2026</span>
           </div>
         </div>
       </div>

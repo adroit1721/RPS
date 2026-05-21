@@ -92,77 +92,94 @@ const TeachersManager = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold text-gray-800">{editId ? 'Edit Teacher' : 'Add New Teacher'}</h3>
+          <h3 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">{editId ? 'Modify Faculty Record' : 'Register New Teacher'}</h3>
           {editId && (
             <button 
               type="button" 
               onClick={() => { setEditId(null); setForm({ name: '', id: '', password: '' }); }}
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
+              className="text-xs font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-widest"
             >
               Cancel Edit
             </button>
           )}
         </div>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <input 
-            type="text"
-            placeholder="Full Name"
-            value={form.name}
-            onChange={e => setForm({...form, name: e.target.value})}
-            className="p-3 border rounded-xl w-full focus:ring-2 focus:ring-green-500 outline-none"
-            required
-          />
-          <input 
-            type="text"
-            placeholder="Assign ID (e.g. TCH-001)"
-            value={form.id}
-            onChange={e => setForm({...form, id: e.target.value})}
-            className="p-3 border rounded-xl w-full focus:ring-2 focus:ring-green-500 outline-none font-mono"
-            required
-          />
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-5">
+            <div className="space-y-2">
+              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-2">Teacher Full Name</label>
             <input 
               type="text"
-              placeholder={editId ? "New Password (leave blank to keep current)" : "Initial Password"}
+              placeholder="e.g. Dr. Sarah Smith"
+              value={form.name}
+              onChange={e => setForm({...form, name: e.target.value})}
+              className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-700 text-sm"
+              required
+            />
+          </div>
+            <div className="space-y-2">
+              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-2">Unique Staff ID</label>
+            <input 
+              type="text"
+              placeholder="TCH-2024-001"
+              value={form.id}
+              onChange={e => setForm({...form, id: e.target.value})}
+              className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-mono font-bold text-indigo-600 text-sm"
+              required
+            />
+          </div>
+            <div className="space-y-2">
+              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-2">{editId ? 'New Password (Optional)' : 'Security Password'}</label>
+            <input 
+              type="text"
+              placeholder={editId ? "Update password (optional)" : "Secure password"}
               value={form.password}
               onChange={e => setForm({...form, password: e.target.value})}
-              className="p-3 border rounded-xl w-full focus:ring-2 focus:ring-green-500 outline-none"
+              className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-700 text-sm"
               required={!editId}
             />
-          <div className="md:col-span-3 flex justify-end">
-            <button type="submit" disabled={loading} className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-bold shadow-md transition-all">
-              {loading ? 'Saving...' : editId ? 'Update Teacher' : 'Add Teacher'}
+          </div>
+          <div className="md:col-span-3 flex justify-end mt-2">
+            <button type="submit" disabled={loading} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-indigo-100 transition-all hover:-translate-y-1 text-sm">
+              {loading ? 'Synchronizing...' : editId ? 'Update Credentials' : 'Commit Faculty Record'}
             </button>
           </div>
         </form>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="p-4 font-bold text-gray-600">Name</th>
-              <th className="p-4 font-bold text-gray-600">ID</th>
-              <th className="p-4 font-bold text-gray-600 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {teachers.length === 0 ? (
-              <tr><td colSpan="3" className="p-8 text-center text-gray-500">No teachers found</td></tr>
-            ) : teachers.map(t => (
-              <tr key={t._id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                <td className="p-4 font-semibold text-gray-800">{t.name}</td>
-                <td className="p-4"><span className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg font-mono text-sm border border-gray-200">{t.id}</span></td>
-                <td className="p-4 text-right space-x-2">
-                  <button onClick={() => handleEdit(t)} className="text-blue-500 hover:text-blue-700 px-3 py-1 font-semibold border border-blue-500 rounded-md">Edit</button>
-                  <button onClick={() => handleDelete(t._id)} className="text-red-500 hover:text-red-700 px-3 py-1 font-semibold border border-red-500 rounded-md">Delete</button>
-                </td>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[500px]">
+            <thead>
+              <tr className="bg-slate-50/50 border-b border-slate-100">
+                <th className="px-6 py-4 font-black text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest">ID</th>
+                <th className="px-6 py-4 font-black text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest">Profile Identity</th>
+                <th className="px-6 py-4 font-black text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest text-right">Operations</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {teachers.length === 0 ? (
+                <tr><td colSpan="3" className="px-4 py-10 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">No active faculty found</td></tr>
+              ) : teachers.map(t => (
+                <tr key={t._id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                  <td className="px-4 py-3 font-black text-slate-800 text-sm italic tracking-tight">{t.name}</td>
+                  <td className="px-4 py-3"><span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-lg font-mono text-[10px] font-black border border-slate-200 shadow-sm uppercase tracking-tighter">{t.id}</span></td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-1.5">
+                      <button onClick={() => handleEdit(t)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all active:scale-90" title="Modify Record">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      </button>
+                      <button onClick={() => handleDelete(t._id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all active:scale-90" title="Delete record">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

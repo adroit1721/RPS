@@ -2,7 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .glass-morphism {
+    @apply bg-white/70 backdrop-blur-xl border border-white/20 shadow-2xl;
+  }
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  @apply bg-slate-50 text-slate-900;
 }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-from-bottom {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+
+.fade-in { animation: fade-in 0.5s ease-out forwards; }
+.slide-in-from-bottom-4 { animation: slide-in-from-bottom 0.5s ease-out forwards; }

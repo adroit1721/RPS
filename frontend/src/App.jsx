@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { logout } from './store/slices/authSlice';
 import Login from './components/Login';
 import AdminDashboard from './components/AdminDashboard';
@@ -9,30 +10,8 @@ import PublicResultView from './components/public/PublicResultView';
 function App() {
   const dispatch = useDispatch();
   const { isAuthenticated, role, user } = useSelector(state => state.auth);
-  const [view, setView] = useState('public'); // Default landing could be public
 
-  // Override view based on auth state and URL params
-  useEffect(() => {
-    // Check for custom login links in URL: ?login=admin or ?login=teacher
-    const params = new URLSearchParams(window.location.search);
-    const loginParam = params.get('login');
-    
-    if (loginParam === 'admin' || loginParam === 'teacher' || loginParam === 'staff') {
-      setView('login');
-      // Clean up URL without refreshing to keep it "custom" and clean
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    if (isAuthenticated) {
-      setView(role === 'admin' ? 'admin' : 'teacher');
-    } else {
-      if (view === 'admin' || view === 'teacher') {
-         setView('public'); 
-      }
-    }
-  }, [isAuthenticated, role, view]);
-
-  // Global fetch interceptor to handle 401 Unauthorized errors (expired/invalid token)
+  // Global fetch interceptor (keeping this for any raw fetches, but mostly using api.js now)
   useEffect(() => {
     const originalFetch = window.fetch;
     window.fetch = async (...args) => {
@@ -43,7 +22,7 @@ function App() {
       return response;
     };
     return () => {
-      window.fetch = originalFetch; // Cleanup on unmount
+      window.fetch = originalFetch;
     };
   }, [dispatch]);
 
@@ -51,15 +30,41 @@ function App() {
     dispatch(logout());
   };
 
-
-  // Navigation logic
-  if (view === 'login') return <Login />;
-  if (isAuthenticated && view === 'admin' && role === 'admin') return <AdminDashboard user={user} onLogout={handleLogout} />;
-  if (isAuthenticated && view === 'teacher' && role === 'teacher') return <TeacherDashboard user={user} onLogout={handleLogout} />;
-  
-  // Default is public result
   return (
-    <PublicResultView setView={setView} />
+    <Router>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<PublicResultView />} />
+        <Route path="/login" element={
+          isAuthenticated ? (
+            <Navigate to={role === 'admin' ? "/admin" : "/teacher"} replace />
+          ) : (
+            <Login />
+          )
+        } />
+
+        {/* Protected Admin Routes */}
+        <Route path="/admin/*" element={
+          isAuthenticated && role === 'admin' ? (
+            <AdminDashboard user={user} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        } />
+
+        {/* Protected Teacher Routes */}
+        <Route path="/teacher/*" element={
+          isAuthenticated && role === 'teacher' ? (
+            <TeacherDashboard user={user} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        } />
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
   );
 }
 

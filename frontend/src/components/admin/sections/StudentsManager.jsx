@@ -62,7 +62,7 @@ const StudentsManager = () => {
         toast.success(editId ? 'Student updated successfully!' : 'Student added successfully!');
         if (!editId) {
           // Keep session and class, clear personal details for faster data entry
-          setForm(f => ({ ...f, name: '', fatherName: '', motherName: '', dob: '', roll: parseInt(f.roll)+1 || '' }));
+          setForm(f => ({ ...f, name: '', fatherName: '', motherName: '', dob: '', roll: (parseInt(f.roll)+1).toString() || '' }));
         } else {
           setForm({ session: new Date().getFullYear().toString(), name: '', fatherName: '', motherName: '', dob: '', classId: '', roll: '' });
           setEditId(null);
@@ -109,16 +109,16 @@ const StudentsManager = () => {
   };
 
   const handleDownloadDemoCSV = () => {
-    const csvContent = "data:text/csv;charset=utf-8," + 
-      "session,name,fatherName,motherName,dob,className,roll\n" +
-      "2024,John Doe,Richard Doe,Jane Doe,2010-05-15,Class 1,101";
+    const headers = "session,name,fatherName,motherName,dob,className,roll";
+    const row = `${new Date().getFullYear()},John Doe,Richard Doe,Jane Doe,2010-01-01,Class 1,101`;
+    const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + row;
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "students_demo.csv");
+    link.setAttribute("download", "students_bulk_template.csv");
     document.body.appendChild(link);
     link.click();
-    link.remove();
+    document.body.removeChild(link);
   };
 
   const handleFileUpload = (e) => {
@@ -200,104 +200,135 @@ const StudentsManager = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Filtering */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-        <h3 className="text-xl font-bold text-gray-800">Students Directory</h3>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-gray-100 gap-3">
+        <h3 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">Students Directory</h3>
         <select 
           value={selectedClassFilter} 
           onChange={e => setSelectedClassFilter(e.target.value)}
-          className="p-2 border rounded-xl bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none"
+          className="w-full sm:w-auto p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-600 text-sm"
         >
           <option value="">All Classes</option>
           {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
         </select>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
         {/* Form */}
-        <div className="xl:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit">
+        <div className="xl:col-span-2 bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 h-fit">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold text-gray-800">{editId ? 'Edit Student' : 'Add Single Student'}</h3>
+            <h3 className="text-base sm:text-lg font-black text-slate-800 tracking-tight">{editId ? 'Edit Student Profile' : 'Add Single Student'}</h3>
             {editId && (
               <button 
                 type="button" 
                 onClick={() => { setEditId(null); setForm({ session: new Date().getFullYear().toString(), name: '', fatherName: '', motherName: '', dob: '', classId: '', roll: '' }); }}
-                className="text-sm text-gray-500 hover:text-gray-700 underline"
+                className="text-xs font-black text-indigo-500 hover:text-indigo-700 uppercase tracking-widest"
               >
                 Cancel Edit
               </button>
             )}
           </div>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input type="text" placeholder="Session (e.g. 2024)" value={form.session} onChange={e => setForm({...form, session: e.target.value})} className="p-3 border rounded-xl" required />
-            <select value={form.classId} onChange={e => setForm({...form, classId: e.target.value})} className="p-3 border rounded-xl" required>
-              <option value="" disabled>Select Class</option>
-              {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
-            <input type="text" placeholder="Student Name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="p-3 border rounded-xl" required />
-            <input type="number" placeholder="Roll Number" value={form.roll} onChange={e => setForm({...form, roll: e.target.value})} className="p-3 border rounded-xl" required />
-            <input type="text" placeholder="Father's Name" value={form.fatherName} onChange={e => setForm({...form, fatherName: e.target.value})} className="p-3 border rounded-xl" required />
-            <input type="text" placeholder="Mother's Name" value={form.motherName} onChange={e => setForm({...form, motherName: e.target.value})} className="p-3 border rounded-xl" required />
-            <div className="md:col-span-2">
-              <label className="block text-sm text-gray-500 mb-1 ml-1">Date of Birth</label>
-              <input type="date" value={form.dob} onChange={e => setForm({...form, dob: e.target.value})} className="p-3 border rounded-xl w-full" required />
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-5">
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400 uppercase ml-2">Academic Session</label>
+              <input type="text" placeholder="e.g. 2024" value={form.session} onChange={e => setForm({...form, session: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-700 text-sm" required />
             </div>
-            <div className="md:col-span-2 flex justify-end mt-2">
-              <button type="submit" disabled={loading} className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-xl font-bold shadow-md transition-all">
-                {loading ? 'Saving...' : editId ? 'Update Student' : 'Save Student'}
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-400 uppercase ml-2">Admission Cycle</label>
+              <select value={form.classId} onChange={e => setForm({...form, classId: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-700 text-sm" required>
+                <option value="" disabled>Select Class</option>
+                {classes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-2">Full Name</label>
+              <input type="text" placeholder="John Doe" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-700 text-sm" required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-2">Roll Number</label>
+              <input type="number" placeholder="101" value={form.roll} onChange={e => setForm({...form, roll: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-700 text-sm" required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-2">Father's Name</label>
+              <input type="text" placeholder="Richard Doe" value={form.fatherName} onChange={e => setForm({...form, fatherName: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-700 text-sm" required />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-2">Mother's Name</label>
+              <input type="text" placeholder="Jane Doe" value={form.motherName} onChange={e => setForm({...form, motherName: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-700 text-sm" required />
+            </div>
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[10px] sm:text-xs font-black text-slate-400 uppercase ml-2">Date of Birth</label>
+              <input type="date" value={form.dob} onChange={e => setForm({...form, dob: e.target.value})} className="w-full p-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-bold text-slate-700 text-sm" required />
+            </div>
+            <div className="md:col-span-2 flex justify-end mt-4">
+              <button type="submit" disabled={loading} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 rounded-2xl font-black shadow-lg shadow-indigo-100 transition-all hover:-translate-y-1 text-base">
+                {loading ? 'Processing...' : editId ? 'Update Record' : 'Enroll Student'}
               </button>
             </div>
           </form>
         </div>
 
         {/* CSV Upload */}
-        <div className="bg-purple-50 p-6 rounded-2xl shadow-sm border border-purple-100 flex flex-col items-center justify-center text-center h-fit">
-          <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mb-4">
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+        <div className="bg-indigo-50/50 p-4 sm:p-6 rounded-2xl border border-indigo-100 flex flex-col items-center justify-center text-center h-fit">
+          <div className="w-12 h-12 bg-white text-indigo-600 rounded-xl shadow-sm flex items-center justify-center mb-4">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
           </div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Bulk Upload</h3>
-          <p className="text-gray-600 text-sm mb-6">Upload multiple students at once using a CSV file.</p>
+          <h3 className="text-lg font-black text-slate-800 mb-1">Automated Enrollment</h3>
+          <p className="text-slate-500 text-[11px] font-bold leading-relaxed mb-6">Upload massive student datasets instantly using CSV format.</p>
           
-          <button onClick={handleDownloadDemoCSV} className="text-purple-600 font-semibold hover:underline mb-4 text-sm">
-            Download Demo CSV
+          <button onClick={handleDownloadDemoCSV} className="text-indigo-600 font-black uppercase text-[9px] tracking-widest hover:text-indigo-800 mb-4 transition-colors">
+            Get CSV Template
           </button>
           
-          <label className="w-full cursor-pointer bg-white border-2 border-dashed border-purple-300 hover:border-purple-500 p-4 rounded-xl transition-colors">
-            <span className="text-purple-600 font-semibold">{loading ? 'Uploading...' : 'Choose CSV File'}</span>
+          <label className="w-full cursor-pointer bg-white border-2 border-dashed border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/10 p-4 rounded-xl transition-all duration-300">
+            <span className="text-indigo-600 font-black text-xs">{loading ? 'Transferring...' : 'Select CSV Dataset'}</span>
             <input type="file" accept=".csv" disabled={loading} className="hidden" onChange={handleFileUpload}/>
           </label>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-100">
-              <th className="p-4 font-bold text-gray-600">Roll</th>
-              <th className="p-4 font-bold text-gray-600">Name</th>
-              <th className="p-4 font-bold text-gray-600">Session</th>
-              <th className="p-4 font-bold text-gray-600">Class</th>
-              <th className="p-4 font-bold text-gray-600 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.length === 0 ? (
-              <tr><td colSpan="5" className="p-8 text-center text-gray-500">No students found</td></tr>
-            ) : students.map(s => (
-              <tr key={s._id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                <td className="p-4 font-mono font-semibold text-gray-600">{s.roll}</td>
-                <td className="p-4 font-semibold text-gray-800">{s.name}</td>
-                <td className="p-4 text-gray-600">{s.session}</td>
-                <td className="p-4"><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs font-bold">{s.classId?.name || 'Loading...'}</span></td>
-                <td className="p-4 text-right space-x-2">
-                  <button onClick={() => handleEdit(s)} className="text-blue-500 hover:text-blue-700 px-2 py-1 font-semibold text-sm border border-blue-500 rounded-md">Edit</button>
-                  <button onClick={() => handleDelete(s._id)} className="text-red-500 hover:text-red-700 px-2 py-1 font-semibold text-sm border border-red-500 rounded-md">Delete</button>
-                </td>
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition-all duration-500">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[600px]">
+            <thead>
+              <tr className="bg-slate-50/50 border-b border-slate-100">
+                <th className="px-6 py-4 font-black text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest">Roll</th>
+                <th className="px-6 py-4 font-black text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest">Student Identity</th>
+                <th className="px-6 py-4 font-black text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest">Class</th>
+                <th className="px-6 py-4 font-black text-slate-400 text-[10px] sm:text-xs uppercase tracking-widest text-right">Operations</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {students.length === 0 ? (
+                <tr><td colSpan="4" className="px-4 py-10 text-center text-slate-400 font-bold uppercase tracking-widest text-[10px]">No records available</td></tr>
+              ) : students.map(s => (
+                <tr key={s._id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                  <td className="px-4 py-3 font-mono font-black text-indigo-600 text-base">{s.roll}</td>
+                  <td className="px-4 py-3">
+                    <p className="font-black text-slate-800 text-sm italic tracking-tight">{s.name}</p>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5 opacity-70">S/O: {s.fatherName}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase border border-indigo-100 shadow-sm">
+                      {s.classId?.name || 'Assigned'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-1.5">
+                      <button onClick={() => handleEdit(s)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all active:scale-90" title="Edit Profile">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      </button>
+                      <button onClick={() => handleDelete(s._id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all active:scale-90" title="Delete record">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

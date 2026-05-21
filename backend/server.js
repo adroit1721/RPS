@@ -3,6 +3,7 @@ const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
 const bcrypt = require('bcryptjs');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -33,7 +34,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // MongoDB + Models
 const mongoose = require('mongoose');
@@ -53,6 +54,7 @@ app.use('/api/teachers', require('./routes/teachers'));
 app.use('/api/students', require('./routes/students'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/public', require('./routes/public'));
+app.use('/api/school', require('./routes/school'));
 // Alias for exams specifically for public
 app.get('/api/exams/published', require('./routes/public').handle ? require('./routes/public').handle : (req, res, next) => {
     // Quick inline proxy to the public router if needed, but better to mount it directly or use the route inside public.js
