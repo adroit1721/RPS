@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
-import { Bell } from 'lucide-react';
 
 const ResultOverview = () => {
   const { classes } = useSelector(state => state.admin);
